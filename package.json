@@ -7,6 +7,7 @@
 		"@apollo/server": "^4.1.1",
 		"apollo-server": "^3.11.1",
 		"bcrypt": "^5.1.0",
+		"bootstrap": "^5.2.2",
 		"graphql": "^16.6.0",
 		"jsonwebtoken": "^8.5.1",
 		"mariadb": "^3.0.2",
@@ -16,10 +17,15 @@
 		"zod": "^3.19.1"
 	},
 	"scripts": {
-		"dev": "nodemon index.js",
+		"dev": "nodemon index.js --ignore client/",
+		"start": "node index.js",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"keywords": [],
 	"author": "",
-	"license": "ISC"
+	"license": "ISC",
+	"devDependencies": {
+		"eslint": "^8.27.0",
+		"prettier": "^2.7.1"
+	}
 }

@@ -1,57 +1,126 @@
-const User = require("../models/user");
-const bcrypt = require("bcrypt");
-const user = require("../models/user");
-const registerUserDataValidator = require("../validators/register.user.validator");
-const { UserInputError } = require("apollo-server");
-const { ZodError } = require("zod");
-const { UniqueConstraintError } = require("sequelize");
+const User = require('../models/user')
+const bcrypt = require('bcrypt')
+const registerUserDataValidator = require('../validators/register.user.validator')
+const { UserInputError } = require('apollo-server')
+const { ZodError } = require('zod')
+const { UniqueConstraintError } = require('sequelize')
+const jwt = require('jsonwebtoken')
+const { appConfig } = require('../config/appConfig')
+const loginDataValidator = require('../validators/logindata.validator')
+const { where } = require('sequelize')
+
+const createToken = (payload) => {
+    return jwt.sign(payload, appConfig().JWT_SECRET)
+}
 
 const resolvers = {
-  Query: {
-    getUsers: async () => {
-      const res = await User.findAll();
-      return res;
-    },
-  },
+    Query: {
+        getUsers: async () => {
+            const res = await User.findAll()
+            return res
+        },
+        login: async (parent, args) => {
+            try {
+                //*validate user login data
+                const data = await loginDataValidator.parseAsync(args)
+                //*find is user is present or not
+                console.log(data)
+                const user = await User.findOne({
+                    where: { username: data.username }
+                })
 
-  Mutation: {
-    register: async (parent, args, context) => {
-      try {
-        //!Validate User Input
-        const data = await registerUserDataValidator.parseAsync(args);
-        //!Encrypt The password
-        const encryptPassword = await bcrypt.hash(data.password, 10);
-        //!Create New User
-        const newUser = await User.create({
-          username: data.username,
-          email: data.email,
-          password: encryptPassword,
-        });
-        console.log(newUser);
-        //!Return New User
-        return {
-          username: newUser.username,
-          email: newUser.email,
-          id: newUser.id,
-          token: createToken({ username: newUser.username }),
-        };
-      } catch (error) {
-        console.error(error);
-        let message = "";
-        if (error instanceof ZodError) {
-          message = error.message;
-        } else if (error instanceof UniqueConstraintError) {
-          message = error.errors.reduce(
-            (acc, curr) => acc + `${curr.path} is already taken`,
-            ""
-          );
+                if (!user) {
+                    throw new ZodError([
+                        {
+                            message: 'username does not exist',
+                            path: ['username']
+                        }
+                    ])
+                }
+                // if (!(await bcrypt.compare(data.password, user.password))) {
+                //     throw new ZodError([
+                //         {
+                //             message: 'password is incorrect',
+                //             path: ['password']
+                //         }
+                //     ])
+                // }
+
+                const { username, email, id } = user.dataValues
+                return {
+                    username,
+                    email,
+                    id,
+                    token: createToken({ username })
+                }
+            } catch (error) {
+                console.log(error)
+                const myError = {}
+                if (error instanceof ZodError) {
+                    error.issues.forEach((issue) => {
+                        issue.path.forEach((pa) => {
+                            myError[pa] = issue.message
+                        })
+                    })
+                } else if (error instanceof UniqueConstraintError) {
+                    Object.keys(error.fields).forEach((fi) => {
+                        myError[fi] = `${fi} already exist`
+                    })
+                }
+                throw new UserInputError('Invalid User Data', {
+                    errors: myError
+                })
+            }
         }
-        throw new UserInputError("Invalid User Data", {
-          message,
-        });
-      }
     },
-  },
-};
 
-module.exports = resolvers;
+    Mutation: {
+        register: async (parent, args) => {
+            try {
+                //!Validate User Input
+                const data = await registerUserDataValidator.parseAsync(args)
+                //!Encrypt The password
+                const encryptPassword = await bcrypt.hash(
+                    data.password,
+                    appConfig().SALT_ROUNDS
+                )
+                //!Create New User
+                const newUser = await User.create({
+                    username: data.username,
+                    email: data.email,
+                    password: encryptPassword
+                })
+                //!Return New User
+                return {
+                    username: newUser.username,
+                    email: newUser.email,
+                    id: newUser.id,
+                    token: createToken({ username: newUser.username })
+                }
+            } catch (error) {
+                /*
+             out error message willl be like 
+             password:...error message,
+             username:..error message
+            */
+                const myError = {}
+                if (error instanceof ZodError) {
+                    error.issues.forEach((issue) => {
+                        issue.path.forEach((pa) => {
+                            myError[pa] = issue.message
+                        })
+                    })
+                } else if (error instanceof UniqueConstraintError) {
+                    Object.keys(error.fields).forEach((fi) => {
+                        myError[fi] = `${fi} already exist`
+                    })
+                }
+                throw new UserInputError('Invalid User Data', {
+                    errors: myError
+                })
+            }
+        }
+    }
+}
+
+module.exports = resolvers
