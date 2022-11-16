@@ -1,22 +1,31 @@
-const User = require('../models/user')
+/* eslint-disable quotes */
+const User = require('../../models/user')
 const bcrypt = require('bcrypt')
-const registerUserDataValidator = require('../validators/register.user.validator')
+const registerUserDataValidator = require('../../validators/register.user.validator')
 const { UserInputError } = require('apollo-server')
 const { ZodError } = require('zod')
 const { UniqueConstraintError } = require('sequelize')
 const jwt = require('jsonwebtoken')
-const { appConfig } = require('../config/appConfig')
-const loginDataValidator = require('../validators/logindata.validator')
-const { where } = require('sequelize')
+const { appConfig } = require('../../config/appConfig')
+const loginDataValidator = require('../../validators/logindata.validator')
+const { Op } = require('sequelize')
+const { AuthenticationError } = require('apollo-server')
 
 const createToken = (payload) => {
     return jwt.sign(payload, appConfig().JWT_SECRET)
 }
 
-const resolvers = {
+const user_resolvers = {
     Query: {
-        getUsers: async () => {
-            const res = await User.findAll()
+        // eslint-disable-next-line no-unused-vars
+        getUsers: async (root, args, context) => {
+            const user = context.user
+            if (!user) {
+                throw AuthenticationError('Un Authonticate')
+            }
+            const res = await User.findAll({
+                where: { username: { [Op.ne]: user.username } }
+            })
             return res
         },
         login: async (parent, args) => {
@@ -24,7 +33,6 @@ const resolvers = {
                 //*validate user login data
                 const data = await loginDataValidator.parseAsync(args)
                 //*find is user is present or not
-                console.log(data)
                 const user = await User.findOne({
                     where: { username: data.username }
                 })
@@ -37,14 +45,14 @@ const resolvers = {
                         }
                     ])
                 }
-                // if (!(await bcrypt.compare(data.password, user.password))) {
-                //     throw new ZodError([
-                //         {
-                //             message: 'password is incorrect',
-                //             path: ['password']
-                //         }
-                //     ])
-                // }
+                if (!(await bcrypt.compare(data.password, user.password))) {
+                    throw new ZodError([
+                        {
+                            message: 'password is incorrect',
+                            path: ['password']
+                        }
+                    ])
+                }
 
                 const { username, email, id } = user.dataValues
                 return {
@@ -54,7 +62,6 @@ const resolvers = {
                     token: createToken({ username })
                 }
             } catch (error) {
-                console.log(error)
                 const myError = {}
                 if (error instanceof ZodError) {
                     error.issues.forEach((issue) => {
@@ -123,4 +130,4 @@ const resolvers = {
     }
 }
 
-module.exports = resolvers
+module.exports = user_resolvers

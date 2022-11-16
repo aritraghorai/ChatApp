@@ -7,13 +7,13 @@ import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
 import { useLazyQuery } from '@apollo/client'
 
+export const TOKEN = 'TOKEN'
 const LoginSceen = () => {
     const [errors, setErors] = useState(undefined)
     const navigate = useNavigate()
     const [login, { loading }] = useLazyQuery(LOGIN_USER, {
         onError: (err) => setErors(err?.graphQLErrors[0].extensions.errors),
-        onCompleted: () => navigate('/login'),
-        fetchPolicy: 'no-cache'
+        onCompleted: (res) => localStorage.setItem(TOKEN, res.login.token)
     })
 
     const [loginFormData, setloginFormData] = useState({
@@ -28,7 +28,6 @@ const LoginSceen = () => {
         })
     }
     const onSubmitHander = (e) => {
-        console.log('hi')
         e.preventDefault()
         login({
             variables: loginFormData
